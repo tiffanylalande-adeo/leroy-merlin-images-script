@@ -3,8 +3,9 @@
 // ============================================================
 
 var CONFIG = {
-  // Nom du dossier principal sur Google Drive contenant les sous-dossiers images
-  DRIVE_FOLDER_NAME: 'Image LMIT',
+  // ID du dossier principal sur Google Drive contenant les sous-dossiers images
+  // (visible dans l'URL Drive : drive.google.com/drive/folders/XXX)
+  DRIVE_FOLDER_ID: '1YVgp4tf_trcgcoKTUKinkV70C6rNJsRi',
 
   // Colonne de matching (numéro) : la valeur qui correspond au nom du sous-dossier
   // Ex: 11 = colonne K (SKU), 9 = colonne I (EAN)
@@ -25,24 +26,22 @@ function onOpen() {
     .createMenu('🖼️ Images produits')
     .addItem('Insérer les images (toutes les lignes)', 'insererImages')
     .addItem('Insérer l\'image (ligne sélectionnée)', 'insererImageLigne')
-    .addItem('⚙️ Modifier la configuration', 'afficherConfig')
+    .addItem('⚙️ Voir la configuration', 'afficherConfig')
     .addToUi();
 }
 
 
 /**
- * Affiche la configuration actuelle et permet de la modifier.
+ * Affiche la configuration actuelle.
  */
 function afficherConfig() {
   var ui = SpreadsheetApp.getUi();
-
   var message =
     'Configuration actuelle :\n\n' +
-    '📁 Dossier Drive : "' + CONFIG.DRIVE_FOLDER_NAME + '"\n' +
+    '📁 ID Dossier Drive : "' + CONFIG.DRIVE_FOLDER_ID + '"\n' +
     '🔑 Colonne de matching : ' + CONFIG.MATCHING_COLUMN + ' (colonne ' + colonneLettre(CONFIG.MATCHING_COLUMN) + ')\n' +
     '🖼️ Colonne image : ' + CONFIG.IMAGE_COLUMN + ' (colonne ' + colonneLettre(CONFIG.IMAGE_COLUMN) + ')\n\n' +
     'Pour modifier, changez les valeurs dans la section CONFIG en haut du script.';
-
   ui.alert('⚙️ Configuration', message, ui.ButtonSet.OK);
 }
 
@@ -62,14 +61,17 @@ function colonneLettre(n) {
 
 
 /**
- * Récupère le dossier principal sur Google Drive.
+ * Récupère le dossier principal via son ID Google Drive.
  */
 function getDossierPrincipal() {
-  var folders = DriveApp.getFoldersByName(CONFIG.DRIVE_FOLDER_NAME);
-  if (!folders.hasNext()) {
-    throw new Error('Dossier "' + CONFIG.DRIVE_FOLDER_NAME + '" introuvable sur Google Drive.\nVérifiez le nom dans la configuration.');
+  try {
+    return DriveApp.getFolderById(CONFIG.DRIVE_FOLDER_ID);
+  } catch (e) {
+    throw new Error(
+      'Dossier introuvable avec l\'ID : "' + CONFIG.DRIVE_FOLDER_ID + '".\n' +
+      'Vérifiez l\'ID dans la configuration et que le dossier est bien partagé avec votre compte.'
+    );
   }
-  return folders.next();
 }
 
 
@@ -78,7 +80,7 @@ function getDossierPrincipal() {
  * Retourne le fichier Drive ou null si introuvable.
  */
 function trouverFichierImage(dossierPrincipal, reference) {
-  var reference = reference.toString().trim();
+  reference = reference.toString().trim();
 
   // Cherche le sous-dossier nommé avec la référence
   var subFolders = dossierPrincipal.getFoldersByName(reference);
@@ -86,14 +88,14 @@ function trouverFichierImage(dossierPrincipal, reference) {
 
   var subFolder = subFolders.next();
 
-  // Cherche le fichier image (EAN.jpg ou EAN.png)
+  // Cherche le fichier image avec le nom exact (EAN.jpg ou EAN.png)
   var extensions = ['.jpg', '.jpeg', '.png', '.webp'];
   for (var i = 0; i < extensions.length; i++) {
     var files = subFolder.getFilesByName(reference + extensions[i]);
     if (files.hasNext()) return files.next();
   }
 
-  // Si pas trouvé avec le nom exact, prend le premier fichier image du dossier
+  // Fallback : prend le premier fichier image trouvé dans le dossier
   var allFiles = subFolder.getFiles();
   while (allFiles.hasNext()) {
     var file = allFiles.next();
