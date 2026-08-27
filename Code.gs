@@ -69,33 +69,32 @@ function getDossierPrincipal() {
   } catch (e) {
     throw new Error(
       'Dossier introuvable avec l\'ID : "' + CONFIG.DRIVE_FOLDER_ID + '".\n' +
-      'Vérifiez l\'ID dans la configuration et que le dossier est bien partagé avec votre compte.'
+      'Vérifiez l\'ID dans la configuration.'
     );
   }
 }
 
 
 /**
- * Cherche un fichier image (jpg ou png) dans un sous-dossier nommé par la référence.
+ * Cherche un fichier image dans un sous-dossier nommé par la référence.
  * Retourne le fichier Drive ou null si introuvable.
  */
 function trouverFichierImage(dossierPrincipal, reference) {
   reference = reference.toString().trim();
 
-  // Cherche le sous-dossier nommé avec la référence
   var subFolders = dossierPrincipal.getFoldersByName(reference);
   if (!subFolders.hasNext()) return null;
 
   var subFolder = subFolders.next();
 
-  // Cherche le fichier image avec le nom exact (EAN.jpg ou EAN.png)
+  // Cherche EAN.jpg / EAN.jpeg / EAN.png / EAN.webp
   var extensions = ['.jpg', '.jpeg', '.png', '.webp'];
   for (var i = 0; i < extensions.length; i++) {
     var files = subFolder.getFilesByName(reference + extensions[i]);
     if (files.hasNext()) return files.next();
   }
 
-  // Fallback : prend le premier fichier image trouvé dans le dossier
+  // Fallback : premier fichier image du dossier
   var allFiles = subFolder.getFiles();
   while (allFiles.hasNext()) {
     var file = allFiles.next();
@@ -111,12 +110,14 @@ function trouverFichierImage(dossierPrincipal, reference) {
 
 /**
  * Insère une image Drive dans une cellule.
+ * Utilise le blob natif pour éviter tout problème de partage/permissions.
  */
 function insererImageDansCellule(sheet, row, file) {
-  // Rend le fichier accessible publiquement le temps de l'insertion
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  var blob = file.getBlob();
+  var imageData = Utilities.base64Encode(blob.getBytes());
+  var mimeType = blob.getContentType();
 
-  var imageUrl = 'https://drive.google.com/uc?export=view&id=' + file.getId();
+  var imageUrl = 'data:' + mimeType + ';base64,' + imageData;
 
   var image = SpreadsheetApp.newCellImage()
     .setSourceUrl(imageUrl)
@@ -177,7 +178,7 @@ function insererImages() {
         nbErreur++;
       }
     } catch (e) {
-      sheet.getRange(row, CONFIG.IMAGE_COLUMN).setValue('❌ Erreur');
+      sheet.getRange(row, CONFIG.IMAGE_COLUMN).setValue('❌ Erreur : ' + e.message);
       nbErreur++;
       console.log('Erreur ligne ' + row + ' : ' + e.message);
     }
