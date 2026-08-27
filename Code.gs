@@ -25,7 +25,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🖼️ Images produits')
     .addItem('Insérer les images (toutes les lignes)', 'insererImages')
-    .addItem('Insérer l\'image (ligne sélectionnée)', 'insererImageLigne')
+    .addItem('Insérer les images (lignes sélectionnées)', 'insererImagesSelection')
     .addItem('⚙️ Voir la configuration', 'afficherConfig')
     .addToUi();
 }
@@ -109,8 +109,7 @@ function trouverFichierImage(dossierPrincipal, reference) {
 
 
 /**
- * Insère une image Drive dans une cellule.
- * Utilise le blob natif pour éviter tout problème de partage/permissions.
+ * Insère une image Drive dans une cellule via blob base64.
  */
 function insererImageDansCellule(sheet, row, file) {
   var blob = file.getBlob();
@@ -130,16 +129,10 @@ function insererImageDansCellule(sheet, row, file) {
 
 
 /**
- * Traite toutes les lignes du sheet.
+ * Fonction commune de traitement d'une liste de numéros de lignes.
  */
-function insererImages() {
+function traiterLignes(rows) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var lastRow = sheet.getLastRow();
-
-  if (lastRow < 2) {
-    SpreadsheetApp.getUi().alert('Aucune donnée à traiter.');
-    return;
-  }
 
   var dossierPrincipal;
   try {
@@ -149,15 +142,15 @@ function insererImages() {
     return;
   }
 
-  var references = sheet.getRange(2, CONFIG.MATCHING_COLUMN, lastRow - 1, 1).getValues();
   var nbOK = 0;
   var nbErreur = 0;
   var nbSaute = 0;
 
-  for (var i = 0; i < references.length; i++) {
-    var row = i + 2;
-    var ref = references[i][0];
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    if (row < 2) continue; // ignore l'en-tête
 
+    var ref = sheet.getRange(row, CONFIG.MATCHING_COLUMN).getValue();
     if (!ref) continue;
 
     // Ne pas écraser une image existante
@@ -194,46 +187,45 @@ function insererImages() {
 
 
 /**
- * Traite uniquement la ligne sélectionnée.
+ * Traite toutes les lignes du sheet.
  */
-function insererImageLigne() {
+function insererImages() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var row = sheet.getActiveRange().getRow();
+  var lastRow = sheet.getLastRow();
 
-  if (row < 2) {
-    SpreadsheetApp.getUi().alert('Sélectionne une ligne de données (pas l\'en-tête).');
+  if (lastRow < 2) {
+    SpreadsheetApp.getUi().alert('Aucune donnée à traiter.');
     return;
   }
 
-  var ref = sheet.getRange(row, CONFIG.MATCHING_COLUMN).getValue();
+  var rows = [];
+  for (var i = 2; i <= lastRow; i++) {
+    rows.push(i);
+  }
 
-  if (!ref) {
-    SpreadsheetApp.getUi().alert(
-      'Aucune référence trouvée en colonne ' + colonneLettre(CONFIG.MATCHING_COLUMN) + ' sur cette ligne.'
-    );
+  traiterLignes(rows);
+}
+
+
+/**
+ * Traite uniquement les lignes sélectionnées (une ou plusieurs).
+ */
+function insererImagesSelection() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var selection = sheet.getActiveRange();
+
+  var firstRow = selection.getRow();
+  var lastRow = firstRow + selection.getNumRows() - 1;
+
+  if (firstRow < 2 && lastRow < 2) {
+    SpreadsheetApp.getUi().alert('Sélectionne au moins une ligne de données (pas l\'en-tête).');
     return;
   }
 
-  var dossierPrincipal;
-  try {
-    dossierPrincipal = getDossierPrincipal();
-  } catch (e) {
-    SpreadsheetApp.getUi().alert('❌ ' + e.message);
-    return;
+  var rows = [];
+  for (var r = firstRow; r <= lastRow; r++) {
+    rows.push(r);
   }
 
-  try {
-    var file = trouverFichierImage(dossierPrincipal, ref);
-
-    if (!file) {
-      SpreadsheetApp.getUi().alert('❌ Aucune image trouvée pour la référence : ' + ref);
-      return;
-    }
-
-    insererImageDansCellule(sheet, row, file);
-    SpreadsheetApp.getUi().alert('✅ Image insérée pour la référence : ' + ref);
-
-  } catch (e) {
-    SpreadsheetApp.getUi().alert('❌ Erreur : ' + e.message);
-  }
+  traiterLignes(rows);
 }
